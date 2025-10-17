@@ -3,12 +3,12 @@
 //  Git Blogger (macOS)
 //
 //  Main interface for macOS - Full GitHub account management
-//  Last Updated: 2025 OCT 17 1800
+//  Last Updated: 2025 OCT 17 1820
 //
 
-#if os(macOS)
 import SwiftUI
 
+#if os(macOS)
 struct ContentView: View {
     @State private var repositories: [Repository] = []
     @State private var selectedRepository: Repository?
@@ -514,6 +514,4 @@ extension Color {
     ContentView()
         .frame(width: 1200, height: 800)
 }
-#else
-#error("ContentView[macOS].swift should only compile for macOS target")
 #endif
