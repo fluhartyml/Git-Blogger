@@ -236,7 +236,7 @@ struct RepositoryDetailView: View {
                         }
                     }
                     
-                    Button(action: {}) {
+                    Button(action: { cloneRepository(repository) }) {
                         Label("Clone Repository", systemImage: "arrow.down.circle")
                     }
                     
@@ -264,6 +264,93 @@ struct RepositoryDetailView: View {
             .padding()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+    
+    private func cloneRepository(_ repository: Repository) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Clone Here"
+        panel.message = "Choose where to clone \(repository.name)"
+        
+        // Set default location to ~/Developer/Git Blogger Repos/
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let defaultCloneLocation = homeDir.appendingPathComponent("Developer/Git Blogger Repos")
+        
+        // Create default directory if it doesn't exist
+        try? FileManager.default.createDirectory(at: defaultCloneLocation, withIntermediateDirectories: true)
+        
+        panel.directoryURL = defaultCloneLocation
+        panel.nameFieldStringValue = repository.name
+        
+        panel.begin { response in
+            guard response == .OK, let selectedURL = panel.url else { return }
+            
+            // Clone the repository
+            Task {
+                await self.performClone(repository: repository, to: selectedURL)
+            }
+        }
+    }
+    
+    private func performClone(repository: Repository, to destination: URL) async {
+        print("🔄 Cloning \(repository.name) to \(destination.path)")
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["clone", repository.cloneUrl, destination.path]
+        
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            if process.terminationStatus == 0 {
+                print("✅ Successfully cloned \(repository.name)")
+                
+                // Show success notification
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "Clone Successful"
+                    alert.informativeText = "\(repository.name) has been cloned to:\n\(destination.path)"
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "Show in Finder")
+                    alert.addButton(withTitle: "OK")
+                    
+                    let response = alert.runModal()
+                    if response == .alertFirstButtonReturn {
+                        NSWorkspace.shared.selectFile(destination.path, inFileViewerRootedAtPath: destination.deletingLastPathComponent().path)
+                    }
+                }
+            } else {
+                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+                print("❌ Clone failed: \(errorString)")
+                
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "Clone Failed"
+                    alert.informativeText = errorString
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                }
+            }
+        } catch {
+            print("❌ Clone error: \(error)")
+            await MainActor.run {
+                let alert = NSAlert()
+                alert.messageText = "Clone Error"
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .critical
+                alert.runModal()
+            }
+        }
     }
 }
 
