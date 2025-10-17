@@ -2,161 +2,96 @@
 //  Issue.swift
 //  Git Blogger
 //
-//  GitHub issue data model for blog posts and project tracking
+//  GitHub issue data model
 //
 
 import Foundation
 
-struct Issue: Codable, Identifiable {
+struct Issue: Codable, Identifiable, Hashable {
     let id: Int
     let number: Int
     let title: String
     let body: String?
     let state: String
     let htmlUrl: String
-    let user: User
-    let labels: [Label]
-    let assignees: [User]
-    let milestone: Milestone?
-    let comments: Int
+    let user: IssueUser
+    let labels: [IssueLabel]
     let createdAt: Date
     let updatedAt: Date
     let closedAt: Date?
+    let comments: Int
     
-    struct User: Codable {
-        let login: String
-        let id: Int
-        let avatarUrl: String
-        let htmlUrl: String
-    }
-    
-    struct Label: Codable, Identifiable {
-        let id: Int
-        let name: String
-        let color: String
-        let description: String?
-        
-        var displayColor: String {
-            "#\(color)"
-        }
-    }
-    
-    struct Milestone: Codable {
-        let id: Int
-        let title: String
-        let description: String?
-        let state: String
-        let dueOn: Date?
+    var url: URL? {
+        URL(string: htmlUrl)
     }
     
     var isOpen: Bool {
         state == "open"
     }
     
-    var isClosed: Bool {
-        state == "closed"
-    }
-    
-    var timeAgo: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: updatedAt, relativeTo: Date())
-    }
-    
-    var labelNames: [String] {
-        labels.map { $0.name }
-    }
-    
-    var hasLabels: Bool {
-        !labels.isEmpty
-    }
-    
-    var statusEmoji: String {
-        isOpen ? "🟢" : "🔴"
-    }
-    
-    var url: URL? {
-        URL(string: htmlUrl)
+    enum CodingKeys: String, CodingKey {
+        case id
+        case number
+        case title
+        case body
+        case state
+        case htmlUrl = "html_url"
+        case user
+        case labels
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case closedAt = "closed_at"
+        case comments
     }
 }
 
-// MARK: - Mock Data for Development
-
-extension Issue {
-    static var mock: [Issue] {
-        let now = Date()
-        let calendar = Calendar.current
-        
-        let mockUser = User(
-            login: "fluhartyml",
-            id: 961824,
-            avatarUrl: "https://avatars.githubusercontent.com/u/961824?v=4",
-            htmlUrl: "https://github.com/fluhartyml"
-        )
-        
-        let blogLabel = Label(
-            id: 1,
-            name: "blog",
-            color: "0075ca",
-            description: "Blog post"
-        )
-        
-        let enhancementLabel = Label(
-            id: 2,
-            name: "enhancement",
-            color: "a2eeef",
-            description: "New feature or request"
-        )
-        
-        return [
-            Issue(
-                id: 1,
-                number: 1,
-                title: "Tally Matrix Clock",
-                body: "This actual project took less than a day from initial Xcode project creation, git integration to App Store Connect submission...",
-                state: "open",
-                htmlUrl: "https://github.com/fluhartyml/TallyMatrices/issues/1",
-                user: mockUser,
-                labels: [blogLabel],
-                assignees: [],
-                milestone: nil,
-                comments: 0,
-                createdAt: calendar.date(byAdding: .hour, value: -19, to: now)!,
-                updatedAt: calendar.date(byAdding: .hour, value: -19, to: now)!,
-                closedAt: nil
-            ),
-            Issue(
-                id: 2,
-                number: 2,
-                title: "First blog post",
-                body: "This is an issue to make my first blog post",
-                state: "open",
-                htmlUrl: "https://github.com/fluhartyml/fluhartyml.github.io/issues/2",
-                user: mockUser,
-                labels: [blogLabel],
-                assignees: [],
-                milestone: nil,
-                comments: 0,
-                createdAt: calendar.date(byAdding: .hour, value: -20, to: now)!,
-                updatedAt: calendar.date(byAdding: .hour, value: -20, to: now)!,
-                closedAt: nil
-            ),
-            Issue(
-                id: 3,
-                number: 5,
-                title: "Add clone repository feature",
-                body: "Users should be able to clone repositories to their local machine",
-                state: "closed",
-                htmlUrl: "https://github.com/fluhartyml/Git-Blogger/issues/5",
-                user: mockUser,
-                labels: [enhancementLabel],
-                assignees: [mockUser],
-                milestone: nil,
-                comments: 2,
-                createdAt: calendar.date(byAdding: .day, value: -3, to: now)!,
-                updatedAt: calendar.date(byAdding: .hour, value: -2, to: now)!,
-                closedAt: calendar.date(byAdding: .hour, value: -2, to: now)!
-            )
-        ]
+struct IssueUser: Codable, Hashable {
+    let login: String
+    let avatarUrl: String
+    
+    enum CodingKeys: String, CodingKey {
+        case login
+        case avatarUrl = "avatar_url"
     }
+}
+
+struct IssueLabel: Codable, Hashable {
+    let name: String
+    let color: String
+}
+
+// Mock data for previews
+extension Issue {
+    static let mock = Issue(
+        id: 1,
+        number: 1,
+        title: "Add dark mode support",
+        body: "It would be great to have dark mode support for better nighttime viewing.",
+        state: "open",
+        htmlUrl: "https://github.com/fluhartyml/fluhartyml.github.io/issues/1",
+        user: IssueUser(login: "fluhartyml", avatarUrl: "https://avatars.githubusercontent.com/u/961824"),
+        labels: [
+            IssueLabel(name: "enhancement", color: "a2eeef"),
+            IssueLabel(name: "good first issue", color: "7057ff")
+        ],
+        createdAt: Date().addingTimeInterval(-86400 * 7),
+        updatedAt: Date().addingTimeInterval(-86400 * 2),
+        closedAt: nil,
+        comments: 3
+    )
+    
+    static let mockClosed = Issue(
+        id: 2,
+        number: 2,
+        title: "Fix broken link on about page",
+        body: "The contact link returns a 404 error.",
+        state: "closed",
+        htmlUrl: "https://github.com/fluhartyml/fluhartyml.github.io/issues/2",
+        user: IssueUser(login: "contributor", avatarUrl: "https://avatars.githubusercontent.com/u/1"),
+        labels: [IssueLabel(name: "bug", color: "d73a4a")],
+        createdAt: Date().addingTimeInterval(-86400 * 14),
+        updatedAt: Date().addingTimeInterval(-86400 * 10),
+        closedAt: Date().addingTimeInterval(-86400 * 10),
+        comments: 1
+    )
 }
