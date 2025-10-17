@@ -23,9 +23,9 @@ struct Repository: Codable, Identifiable {
     let size: Int
     let defaultBranch: String
     let openIssuesCount: Int
-    let isPrivate: Bool
-    let isFork: Bool
-    let isArchived: Bool
+    let `private`: Bool
+    let fork: Bool
+    let archived: Bool
     let hasWiki: Bool
     let hasPages: Bool
     let createdAt: Date
@@ -41,6 +41,10 @@ struct Repository: Codable, Identifiable {
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
     }
+    
+    var isPrivate: Bool { `private` }
+    var isFork: Bool { fork }
+    var isArchived: Bool { archived }
     
     var lastActivity: String {
         let formatter = RelativeDateTimeFormatter()
@@ -73,9 +77,9 @@ extension Repository {
                 size: 1024,
                 defaultBranch: "main",
                 openIssuesCount: 0,
-                isPrivate: false,
-                isFork: false,
-                isArchived: false,
+                `private`: false,
+                fork: false,
+                archived: false,
                 hasWiki: true,
                 hasPages: true,
                 createdAt: calendar.date(byAdding: .year, value: -2, to: now)!,
@@ -98,9 +102,9 @@ extension Repository {
                 size: 512,
                 defaultBranch: "main",
                 openIssuesCount: 3,
-                isPrivate: false,
-                isFork: false,
-                isArchived: false,
+                `private`: false,
+                fork: false,
+                archived: false,
                 hasWiki: false,
                 hasPages: false,
                 createdAt: calendar.date(byAdding: .month, value: -1, to: now)!,
@@ -123,9 +127,9 @@ extension Repository {
                 size: 2048,
                 defaultBranch: "main",
                 openIssuesCount: 1,
-                isPrivate: false,
-                isFork: false,
-                isArchived: false,
+                `private`: false,
+                fork: false,
+                archived: false,
                 hasWiki: false,
                 hasPages: false,
                 createdAt: calendar.date(byAdding: .month, value: -6, to: now)!,

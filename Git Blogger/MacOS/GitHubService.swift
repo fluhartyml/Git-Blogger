@@ -29,16 +29,28 @@ class GitHubService {
         }
         
         var request = URLRequest(url: url)
-        request.setValue("token \(configManager.config.github.token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(configManager.config.github.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        
+        print("🔍 Fetching GitHub repos from: \(urlString)")
+        print("🔑 Using token: \(configManager.config.github.token.prefix(10))...")
         
         let (data, response) = try await URLSession.shared.data(for: request)
+        
+        print("📦 Received response: \(response)")
+        if let httpResponse = response as? HTTPURLResponse {
+            print("📊 Status code: \(httpResponse.statusCode)")
+            print("📋 Headers: \(httpResponse.allHeaderFields)")
+        }
+        print("💾 Data size: \(data.count) bytes")
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GitHubError.invalidResponse
         }
         
         guard httpResponse.statusCode == 200 else {
+            print("❌ HTTP Error: \(httpResponse.statusCode)")
             throw GitHubError.httpError(httpResponse.statusCode)
         }
         
@@ -46,12 +58,21 @@ class GitHubService {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         decoder.dateDecodingStrategy = .iso8601
         
-        let repos = try decoder.decode([Repository].self, from: data)
-        
-        // Cache to data directory
-        try? cacheRepositories(repos)
-        
-        return repos
+        do {
+            let repos = try decoder.decode([Repository].self, from: data)
+            print("✅ Successfully decoded \(repos.count) repositories")
+            
+            // Cache to data directory
+            try? cacheRepositories(repos)
+            
+            return repos
+        } catch {
+            print("❌ JSON Decode Error: \(error)")
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("📄 Raw JSON (first 500 chars): \(jsonString.prefix(500))")
+            }
+            throw error
+        }
     }
     
     // MARK: - Cache Management
