@@ -75,6 +75,55 @@ class GitHubService {
         }
     }
     
+    // MARK: - Fetch Issues
+    
+    func fetchIssues(for repository: Repository, state: String = "all") async throws -> [Issue] {
+        guard !configManager.config.github.token.isEmpty else {
+            throw GitHubError.noToken
+        }
+        
+        let urlString = "https://api.github.com/repos/\(repository.fullName)/issues?state=\(state)&per_page=100"
+        
+        guard let url = URL(string: urlString) else {
+            throw GitHubError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(configManager.config.github.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        
+        print("🔍 Fetching issues for \(repository.name) from: \(urlString)")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            print("❌ HTTP Error: \(httpResponse.statusCode)")
+            throw GitHubError.httpError(httpResponse.statusCode)
+        }
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        decoder.dateDecodingStrategy = .iso8601
+        
+        do {
+            let issues = try decoder.decode([Issue].self, from: data)
+            print("✅ Successfully decoded \(issues.count) issues for \(repository.name)")
+            
+            // Cache to data directory
+            try? cacheIssues(issues, for: repository)
+            
+            return issues
+        } catch {
+            print("❌ JSON Decode Error: \(error)")
+            throw error
+        }
+    }
+    
     // MARK: - Cache Management
     
     private func cacheRepositories(_ repos: [Repository]) throws {
@@ -101,6 +150,32 @@ class GitHubService {
         decoder.dateDecodingStrategy = .iso8601
         
         return try? decoder.decode([Repository].self, from: data)
+    }
+    
+    private func cacheIssues(_ issues: [Issue], for repository: Repository) throws {
+        configManager.ensureDataDirectoryExists()
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        
+        let data = try encoder.encode(issues)
+        let cacheURL = configManager.dataFileURL(for: "issues-\(repository.name).json")
+        
+        try data.write(to: cacheURL)
+        print("Cached issues to: \(cacheURL.path)")
+    }
+    
+    func loadCachedIssues(for repository: Repository) -> [Issue]? {
+        let cacheURL = configManager.dataFileURL(for: "issues-\(repository.name).json")
+        
+        guard let data = try? Data(contentsOf: cacheURL) else { return nil }
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        decoder.dateDecodingStrategy = .iso8601
+        
+        return try? decoder.decode([Issue].self, from: data)
     }
 }
 

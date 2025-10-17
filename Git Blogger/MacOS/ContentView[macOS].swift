@@ -7,32 +7,26 @@
 
 import SwiftUI
 
+#if os(macOS)
 struct ContentView: View {
-    @StateObject private var configManager = ConfigManager()
     @State private var repositories: [Repository] = []
+    @State private var selectedRepository: Repository?
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingSettings = false
-    
-    private var githubService: GitHubService {
-        GitHubService(configManager: configManager)
-    }
+    private let configManager = ConfigManager()
     
     var body: some View {
         NavigationSplitView {
-            // SIDEBAR - Repository and content browser
-            List {
+            // Left Sidebar
+            List(selection: $selectedRepository) {
                 Section("GitHub Repositories") {
-                    if repositories.isEmpty && !isLoading {
-                        Text("No repositories loaded")
-                            .foregroundColor(.secondary)
-                    }
-                    
                     ForEach(repositories) { repo in
-                        NavigationLink(destination: RepositoryDetailView(repository: repo)) {
+                        NavigationLink(value: repo) {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
-                                    Image(systemName: repo.isPrivate ? "lock.fill" : "folder")
+                                    Image(systemName: "folder.fill")
+                                        .foregroundStyle(.blue)
                                     Text(repo.name)
                                         .font(.headline)
                                 }
@@ -40,147 +34,103 @@ struct ContentView: View {
                                 if let description = repo.description {
                                     Text(description)
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundStyle(.secondary)
                                         .lineLimit(2)
                                 }
                                 
-                                HStack {
+                                HStack(spacing: 12) {
                                     if let language = repo.language {
                                         Label(language, systemImage: "chevron.left.forwardslash.chevron.right")
                                             .font(.caption2)
                                     }
                                     
-                                    if repo.hasWiki {
-                                        Label("Wiki", systemImage: "book")
-                                            .font(.caption2)
-                                    }
-                                    
-                                    if repo.hasPages {
-                                        Label("Pages", systemImage: "globe")
-                                            .font(.caption2)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    Text(repo.lastActivity)
+                                    Label("\(repo.stargazersCount)", systemImage: "star")
                                         .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                    
+                                    if repo.hasWiki {
+                                        Label("Wiki", systemImage: "book.closed")
+                                            .font(.caption2)
+                                    }
                                 }
+                                .foregroundStyle(.secondary)
                             }
                             .padding(.vertical, 4)
                         }
+                        
+                        // Issues subsection
+                        if repo.openIssuesCount > 0 {
+                            DisclosureGroup {
+                                // Placeholder for issue list
+                                Text("Issue #1")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("Issue #2")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } label: {
+                                Label("\(repo.openIssuesCount) Issues", systemImage: "exclamationmark.circle")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
                     }
-                }
-                
-                Section("Blog Posts") {
-                    Label("My First Post", systemImage: "doc.text")
-                    Label("Another Post", systemImage: "doc.text")
                 }
             }
             .navigationTitle("Git Blogger")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: loadRepositories) {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gear")
                     }
-                    .disabled(isLoading || !configManager.hasGitHubToken)
                 }
                 
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingSettings = true }) {
-                        Label("Settings", systemImage: "gear")
-                    }
-                }
-            }
-            
-        } detail: {
-            // DETAIL VIEW - Content browser and editor
-            if configManager.hasGitHubToken {
-                VStack(spacing: 20) {
-                    Image(systemName: "book.pages")
-                        .font(.system(size: 64))
-                        .foregroundColor(.secondary)
-                    
-                    Text("Select a repository to manage")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                    
-                    if isLoading {
-                        ProgressView("Loading repositories...")
-                    }
-                    
-                    if let error = errorMessage {
-                        VStack(spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 32))
-                                .foregroundColor(.orange)
-                            Text(error)
-                                .foregroundColor(.secondary)
-                            Button("Try Again") {
-                                loadRepositories()
-                            }
+                    Button {
+                        Task {
+                            await fetchRepositories()
                         }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
                     }
+                    .disabled(isLoading)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                VStack(spacing: 20) {
-                    Image(systemName: "key.fill")
-                        .font(.system(size: 64))
-                        .foregroundColor(.secondary)
-                    
-                    Text("GitHub Token Required")
-                        .font(.title2)
-                    
-                    Text("Configure your GitHub personal access token to get started")
-                        .foregroundColor(.secondary)
-                    
-                    Button("Open Settings") {
-                        showingSettings = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        } detail: {
+            if let repo = selectedRepository {
+                RepositoryDetailView(repository: repo)
+            } else {
+                ContentUnavailableView(
+                    "Select a Repository",
+                    systemImage: "folder",
+                    description: Text("Choose a repository from the sidebar to view details")
+                )
+            }
+        }
+        .task {
+            await fetchRepositories()
         }
         .sheet(isPresented: $showingSettings) {
             PathSettingsView(configManager: configManager)
         }
-        .onAppear {
-            // Load cached repositories on launch
-            if let cached = githubService.loadCachedRepositories() {
-                repositories = cached
-            }
-            
-            // Auto-refresh if token is configured
-            if configManager.hasGitHubToken {
-                loadRepositories()
-            }
-        }
     }
     
-    private func loadRepositories() {
+    private func fetchRepositories() async {
         isLoading = true
         errorMessage = nil
         
-        Task {
-            do {
-                let repos = try await githubService.fetchRepositories()
-                await MainActor.run {
-                    repositories = repos
-                    isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    isLoading = false
-                }
-            }
+        do {
+            let service = GitHubService(configManager: configManager)
+            repositories = try await service.fetchRepositories()
+        } catch {
+            errorMessage = error.localizedDescription
+            print("Error fetching repositories: \(error)")
         }
+        
+        isLoading = false
     }
 }
-
-// MARK: - Repository Detail View
 
 struct RepositoryDetailView: View {
     let repository: Repository
@@ -189,33 +139,55 @@ struct RepositoryDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: repository.isPrivate ? "lock.fill" : "folder")
-                            .font(.title)
+                HStack {
+                    Image(systemName: "folder.fill")
+                        .font(.largeTitle)
+                        .foregroundStyle(.blue)
+                    
+                    VStack(alignment: .leading) {
                         Text(repository.name)
                             .font(.largeTitle)
-                            .bold()
-                    }
-                    
-                    if let description = repository.description {
-                        Text(description)
-                            .font(.title3)
-                            .foregroundColor(.secondary)
+                            .fontWeight(.bold)
+                        
+                        if let description = repository.description {
+                            Text(description)
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 
-                // Stats
+                // Stats row with issue indicator
                 HStack(spacing: 20) {
                     Label("\(repository.stargazersCount)", systemImage: "star")
                     Label("\(repository.forksCount)", systemImage: "tuningfork")
-                    Label("\(repository.openIssuesCount)", systemImage: "exclamationmark.circle")
+                    Label("0", systemImage: "clock")
+                    
+                    // Issue indicator with color coding
+                    HStack(spacing: 4) {
+                        if repository.openIssuesCount > 0 {
+                            Image(systemName: "circle.fill")
+                                .foregroundStyle(.red)
+                                .font(.caption2)
+                        } else {
+                            Image(systemName: "circle.fill")
+                                .foregroundStyle(.green)
+                                .font(.caption2)
+                        }
+                        
+                        Text("📋 \(repository.openIssuesCount) open")
+                        
+                        // Show closed count if we have it (placeholder for now)
+                        Text("/ 0 closed")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.callout)
                     
                     if let language = repository.language {
                         Label(language, systemImage: "chevron.left.forwardslash.chevron.right")
                     }
                 }
-                .font(.caption)
+                .foregroundStyle(.secondary)
                 
                 Divider()
                 
@@ -224,136 +196,68 @@ struct RepositoryDetailView: View {
                     Text("Actions")
                         .font(.headline)
                     
-                    if repository.hasWiki {
-                        Button(action: {}) {
-                            Label("Manage Wiki", systemImage: "book")
+                    HStack(spacing: 12) {
+                        Button {
+                            // Manage wiki action
+                        } label: {
+                            Label("Manage Wiki", systemImage: "book.closed")
+                        }
+                        .disabled(!repository.hasWiki)
+                        
+                        Button {
+                            // Clone repository action
+                        } label: {
+                            Label("Clone Repository", systemImage: "arrow.down.circle")
+                        }
+                        
+                        Button {
+                            if let url = repository.url {
+                                NSWorkspace.shared.open(url)
+                            }
+                        } label: {
+                            Label("Open on GitHub", systemImage: "safari")
                         }
                     }
-                    
-                    if repository.hasPages {
-                        Button(action: {}) {
-                            Label("View GitHub Pages", systemImage: "globe")
-                        }
-                    }
-                    
-                    Button(action: { cloneRepository(repository) }) {
-                        Label("Clone Repository", systemImage: "arrow.down.circle")
-                    }
-                    
-                    if let url = repository.url {
-                        Link(destination: url) {
-                            Label("Open on GitHub", systemImage: "arrow.up.forward")
-                        }
-                    }
+                    .buttonStyle(.bordered)
                 }
                 
                 Divider()
                 
-                // Metadata
-                VStack(alignment: .leading, spacing: 8) {
+                // Repository Info
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Repository Info")
                         .font(.headline)
                     
-                    LabeledContent("Default Branch", value: repository.defaultBranch)
-                    LabeledContent("Created", value: repository.createdAt.formatted(date: .abbreviated, time: .omitted))
-                    LabeledContent("Last Updated", value: repository.updatedAt.formatted(date: .abbreviated, time: .shortened))
-                    LabeledContent("Size", value: "\(repository.size) KB")
+                    InfoRow(label: "Default Branch", value: repository.defaultBranch)
+                    InfoRow(label: "Created", value: repository.createdAt.formatted(date: .abbreviated, time: .omitted))
+                    InfoRow(label: "Last Updated", value: repository.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                    InfoRow(label: "Size", value: "\(repository.size) KB")
                 }
-                .font(.caption)
+                
+                Spacer()
             }
             .padding()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+}
+
+struct InfoRow: View {
+    let label: String
+    let value: String
     
-    private func cloneRepository(_ repository: Repository) {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Clone Here"
-        panel.message = "Choose where to clone \(repository.name)"
-        
-        // Set default location to ~/Developer/Git Blogger Repos/
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
-        let defaultCloneLocation = homeDir.appendingPathComponent("Developer/Git Blogger Repos")
-        
-        // Create default directory if it doesn't exist
-        try? FileManager.default.createDirectory(at: defaultCloneLocation, withIntermediateDirectories: true)
-        
-        panel.directoryURL = defaultCloneLocation
-        panel.nameFieldStringValue = repository.name
-        
-        panel.begin { response in
-            guard response == .OK, let selectedURL = panel.url else { return }
-            
-            // Clone the repository
-            Task {
-                await self.performClone(repository: repository, to: selectedURL)
-            }
-        }
-    }
-    
-    private func performClone(repository: Repository, to destination: URL) async {
-        print("🔄 Cloning \(repository.name) to \(destination.path)")
-        
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["clone", repository.cloneUrl, destination.path]
-        
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-        
-        do {
-            try process.run()
-            process.waitUntilExit()
-            
-            if process.terminationStatus == 0 {
-                print("✅ Successfully cloned \(repository.name)")
-                
-                // Show success notification
-                await MainActor.run {
-                    let alert = NSAlert()
-                    alert.messageText = "Clone Successful"
-                    alert.informativeText = "\(repository.name) has been cloned to:\n\(destination.path)"
-                    alert.alertStyle = .informational
-                    alert.addButton(withTitle: "Show in Finder")
-                    alert.addButton(withTitle: "OK")
-                    
-                    let response = alert.runModal()
-                    if response == .alertFirstButtonReturn {
-                        NSWorkspace.shared.selectFile(destination.path, inFileViewerRootedAtPath: destination.deletingLastPathComponent().path)
-                    }
-                }
-            } else {
-                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-                print("❌ Clone failed: \(errorString)")
-                
-                await MainActor.run {
-                    let alert = NSAlert()
-                    alert.messageText = "Clone Failed"
-                    alert.informativeText = errorString
-                    alert.alertStyle = .warning
-                    alert.runModal()
-                }
-            }
-        } catch {
-            print("❌ Clone error: \(error)")
-            await MainActor.run {
-                let alert = NSAlert()
-                alert.messageText = "Clone Error"
-                alert.informativeText = error.localizedDescription
-                alert.alertStyle = .critical
-                alert.runModal()
-            }
+    var body: some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
         }
     }
 }
 
 #Preview {
     ContentView()
+        .frame(width: 1200, height: 800)
 }
+#endif

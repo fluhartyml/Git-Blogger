@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Repository: Codable, Identifiable {
+struct Repository: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
     let fullName: String
@@ -23,9 +23,9 @@ struct Repository: Codable, Identifiable {
     let size: Int
     let defaultBranch: String
     let openIssuesCount: Int
-    let `private`: Bool
-    let fork: Bool
-    let archived: Bool
+    let isPrivate: Bool
+    let isFork: Bool
+    let isArchived: Bool
     let hasWiki: Bool
     let hasPages: Bool
     let createdAt: Date
@@ -36,106 +36,90 @@ struct Repository: Codable, Identifiable {
         URL(string: htmlUrl)
     }
     
-    var displayName: String {
-        name.replacingOccurrences(of: "-", with: " ")
-            .replacingOccurrences(of: "_", with: " ")
-            .capitalized
-    }
+    // Hashable conformance (automatically synthesized for structs with Hashable properties)
+    // Swift will auto-generate hash(into:) and == based on all properties
     
-    var isPrivate: Bool { `private` }
-    var isFork: Bool { fork }
-    var isArchived: Bool { archived }
-    
-    var lastActivity: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: updatedAt, relativeTo: Date())
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case fullName = "full_name"
+        case description
+        case htmlUrl = "html_url"
+        case cloneUrl = "clone_url"
+        case sshUrl = "ssh_url"
+        case homepage
+        case language
+        case forksCount = "forks_count"
+        case stargazersCount = "stargazers_count"
+        case watchersCount = "watchers_count"
+        case size
+        case defaultBranch = "default_branch"
+        case openIssuesCount = "open_issues_count"
+        case isPrivate = "private"
+        case isFork = "fork"
+        case isArchived = "archived"
+        case hasWiki = "has_wiki"
+        case hasPages = "has_pages"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case pushedAt = "pushed_at"
     }
 }
 
-// MARK: - Mock Data for Development
-
+// Mock data for previews
 extension Repository {
-    static var mock: [Repository] {
-        let now = Date()
-        let calendar = Calendar.current
-        
-        return [
-            Repository(
-                id: 1,
-                name: "fluhartyml.github.io",
-                fullName: "fluhartyml/fluhartyml.github.io",
-                description: "Personal portfolio and blog",
-                htmlUrl: "https://github.com/fluhartyml/fluhartyml.github.io",
-                cloneUrl: "https://github.com/fluhartyml/fluhartyml.github.io.git",
-                sshUrl: "git@github.com:fluhartyml/fluhartyml.github.io.git",
-                homepage: "https://fluhartyml.github.io",
-                language: "HTML",
-                forksCount: 0,
-                stargazersCount: 5,
-                watchersCount: 1,
-                size: 1024,
-                defaultBranch: "main",
-                openIssuesCount: 0,
-                `private`: false,
-                fork: false,
-                archived: false,
-                hasWiki: true,
-                hasPages: true,
-                createdAt: calendar.date(byAdding: .year, value: -2, to: now)!,
-                updatedAt: calendar.date(byAdding: .day, value: -1, to: now)!,
-                pushedAt: calendar.date(byAdding: .day, value: -1, to: now)!
-            ),
-            Repository(
-                id: 2,
-                name: "Git-Blogger",
-                fullName: "fluhartyml/Git-Blogger",
-                description: "Personal blogging app with GitHub integration",
-                htmlUrl: "https://github.com/fluhartyml/Git-Blogger",
-                cloneUrl: "https://github.com/fluhartyml/Git-Blogger.git",
-                sshUrl: "git@github.com:fluhartyml/Git-Blogger.git",
-                homepage: nil,
-                language: "Swift",
-                forksCount: 0,
-                stargazersCount: 2,
-                watchersCount: 1,
-                size: 512,
-                defaultBranch: "main",
-                openIssuesCount: 3,
-                `private`: false,
-                fork: false,
-                archived: false,
-                hasWiki: false,
-                hasPages: false,
-                createdAt: calendar.date(byAdding: .month, value: -1, to: now)!,
-                updatedAt: now,
-                pushedAt: now
-            ),
-            Repository(
-                id: 3,
-                name: "InkwellBinary",
-                fullName: "fluhartyml/InkwellBinary",
-                description: "Binary clock iOS app",
-                htmlUrl: "https://github.com/fluhartyml/InkwellBinary",
-                cloneUrl: "https://github.com/fluhartyml/InkwellBinary.git",
-                sshUrl: "git@github.com:fluhartyml/InkwellBinary.git",
-                homepage: nil,
-                language: "Swift",
-                forksCount: 0,
-                stargazersCount: 8,
-                watchersCount: 2,
-                size: 2048,
-                defaultBranch: "main",
-                openIssuesCount: 1,
-                `private`: false,
-                fork: false,
-                archived: false,
-                hasWiki: false,
-                hasPages: false,
-                createdAt: calendar.date(byAdding: .month, value: -6, to: now)!,
-                updatedAt: calendar.date(byAdding: .day, value: -7, to: now)!,
-                pushedAt: calendar.date(byAdding: .day, value: -7, to: now)!
-            )
-        ]
-    }
+    static let mock = Repository(
+        id: 1,
+        name: "fluhartyml.github.io",
+        fullName: "fluhartyml/fluhartyml.github.io",
+        description: "Personal portfolio showcasing my Apple/iOS development projects",
+        htmlUrl: "https://github.com/fluhartyml/fluhartyml.github.io",
+        cloneUrl: "https://github.com/fluhartyml/fluhartyml.github.io.git",
+        sshUrl: "git@github.com:fluhartyml/fluhartyml.github.io.git",
+        homepage: "https://fluhartyml.github.io",
+        language: "Swift",
+        forksCount: 0,
+        stargazersCount: 5,
+        watchersCount: 1,
+        size: 1024,
+        defaultBranch: "main",
+        openIssuesCount: 2,
+        isPrivate: false,
+        isFork: false,
+        isArchived: false,
+        hasWiki: true,
+        hasPages: true,
+        createdAt: Date().addingTimeInterval(-86400 * 30),
+        updatedAt: Date().addingTimeInterval(-86400 * 2),
+        pushedAt: Date().addingTimeInterval(-86400)
+    )
+    
+    static let mockList = [
+        mock,
+        Repository(
+            id: 2,
+            name: "Git-Blogger",
+            fullName: "fluhartyml/Git-Blogger",
+            description: "macOS app for managing GitHub repositories and blogging",
+            htmlUrl: "https://github.com/fluhartyml/Git-Blogger",
+            cloneUrl: "https://github.com/fluhartyml/Git-Blogger.git",
+            sshUrl: "git@github.com:fluhartyml/Git-Blogger.git",
+            homepage: nil,
+            language: "Swift",
+            forksCount: 0,
+            stargazersCount: 0,
+            watchersCount: 0,
+            size: 256,
+            defaultBranch: "main",
+            openIssuesCount: 0,
+            isPrivate: false,
+            isFork: false,
+            isArchived: false,
+            hasWiki: false,
+            hasPages: false,
+            createdAt: Date().addingTimeInterval(-86400 * 7),
+            updatedAt: Date(),
+            pushedAt: Date()
+        )
+    ]
 }
