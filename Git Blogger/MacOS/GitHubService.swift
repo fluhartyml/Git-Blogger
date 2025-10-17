@@ -55,7 +55,7 @@ class GitHubService {
         }
         
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Remove .convertFromSnakeCase - we handle it manually in CodingKeys
         decoder.dateDecodingStrategy = .iso8601
         
         do {
@@ -107,7 +107,7 @@ class GitHubService {
         }
         
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Remove .convertFromSnakeCase - we handle it manually in CodingKeys
         decoder.dateDecodingStrategy = .iso8601
         
         do {
@@ -146,7 +146,7 @@ class GitHubService {
         guard let data = try? Data(contentsOf: cacheURL) else { return nil }
         
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Remove .convertFromSnakeCase - we handle it manually in CodingKeys
         decoder.dateDecodingStrategy = .iso8601
         
         return try? decoder.decode([Repository].self, from: data)
@@ -172,7 +172,7 @@ class GitHubService {
         guard let data = try? Data(contentsOf: cacheURL) else { return nil }
         
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Remove .convertFromSnakeCase - we handle it manually in CodingKeys
         decoder.dateDecodingStrategy = .iso8601
         
         return try? decoder.decode([Issue].self, from: data)
