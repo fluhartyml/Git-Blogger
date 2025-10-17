@@ -124,6 +124,54 @@ class GitHubService {
         }
     }
     
+    // MARK: - Update Issue
+    
+    func updateIssue(
+        repository: Repository,
+        issueNumber: Int,
+        title: String,
+        body: String
+    ) async throws {
+        guard !configManager.config.github.token.isEmpty else {
+            throw GitHubError.noToken
+        }
+        
+        let urlString = "https://api.github.com/repos/\(repository.fullName)/issues/\(issueNumber)"
+        
+        guard let url = URL(string: urlString) else {
+            throw GitHubError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("Bearer \(configManager.config.github.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let payload: [String: String] = [
+            "title": title,
+            "body": body
+        ]
+        
+        request.httpBody = try JSONEncoder().encode(payload)
+        
+        print("🔄 Updating issue #\(issueNumber) in \(repository.name)")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            print("❌ HTTP Error: \(httpResponse.statusCode)")
+            throw GitHubError.httpError(httpResponse.statusCode)
+        }
+        
+        print("✅ Successfully updated issue #\(issueNumber)")
+    }
+    
     // MARK: - Cache Management
     
     private func cacheRepositories(_ repos: [Repository]) throws {

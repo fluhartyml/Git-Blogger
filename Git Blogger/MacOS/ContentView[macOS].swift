@@ -3,11 +3,12 @@
 //  Git Blogger (macOS)
 //
 //  Main interface for macOS - Full GitHub account management
+//  Last Updated: 2025 OCT 17 1800
 //
 
+#if os(macOS)
 import SwiftUI
 
-#if os(macOS)
 struct ContentView: View {
     @State private var repositories: [Repository] = []
     @State private var selectedRepository: Repository?
@@ -21,7 +22,7 @@ struct ContentView: View {
     
     var body: some View {
         NavigationSplitView {
-            // Left Sidebar
+            // Left Sidebar - Repository List
             List(selection: $selectedRepository) {
                 Section("GitHub Repositories") {
                     ForEach(repositories) { repo in
@@ -59,34 +60,6 @@ struct ContentView: View {
                             }
                             .padding(.vertical, 4)
                         }
-                        
-                        // Issues subsection
-                        if repo.openIssuesCount > 0 {
-                            DisclosureGroup {
-                                Button("Issue #1") {
-                                    handleIssueClick(for: repo)
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
-                                
-                                if repo.openIssuesCount > 1 {
-                                    Button("Issue #2") {
-                                        handleIssueClick(for: repo)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(.secondary)
-                                }
-                            } label: {
-                                Button(action: {
-                                    handleIssueClick(for: repo)
-                                }) {
-                                    Label("\(repo.openIssuesCount) Issues", systemImage: "exclamationmark.circle")
-                                        .font(.caption)
-                                        .foregroundStyle(.orange)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
                     }
                 }
             }
@@ -113,7 +86,13 @@ struct ContentView: View {
             }
         } detail: {
             if let issue = selectedIssue {
-                IssueDetailView(issue: issue)
+                IssueDetailView(
+                    issue: issue,
+                    configManager: configManager,
+                    repository: repositories.first(where: { repo in
+                        issue.htmlUrl.contains(repo.fullName)
+                    }) ?? .mock
+                )
             } else if let repo = selectedRepository {
                 RepositoryDetailView(repository: repo, onIssueClick: {
                     handleIssueClick(for: repo)
@@ -127,7 +106,6 @@ struct ContentView: View {
             }
         }
         .onChange(of: selectedRepository) { _, newValue in
-            // Clear selected issue when switching repositories
             if newValue != nil {
                 selectedIssue = nil
             }
@@ -166,11 +144,9 @@ struct ContentView: View {
                 
                 await MainActor.run {
                     if issues.count == 1 {
-                        // Single issue - open directly
                         selectedIssue = issues.first
                         selectedRepository = nil
                     } else if issues.count > 1 {
-                        // Multiple issues - show picker
                         issuesForPicker = issues
                         showingIssuePicker = true
                     }
@@ -305,6 +281,10 @@ struct RepositoryDetailView: View {
 
 struct IssueDetailView: View {
     let issue: Issue
+    let configManager: ConfigManager
+    let repository: Repository
+    
+    @State private var showingEditor = false
     
     var body: some View {
         ScrollView {
@@ -398,14 +378,23 @@ struct IssueDetailView: View {
                 Divider()
                 
                 // Actions
-                Button {
-                    if let url = issue.url {
-                        NSWorkspace.shared.open(url)
+                HStack(spacing: 12) {
+                    Button {
+                        showingEditor = true
+                    } label: {
+                        Label("Edit Post", systemImage: "pencil")
                     }
-                } label: {
-                    Label("Open on GitHub", systemImage: "safari")
+                    .buttonStyle(.bordered)
+                    
+                    Button {
+                        if let url = issue.url {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        Label("Open on GitHub", systemImage: "safari")
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
                 
                 Spacer()
             }
@@ -525,4 +514,6 @@ extension Color {
     ContentView()
         .frame(width: 1200, height: 800)
 }
+#else
+#error("ContentView[macOS].swift should only compile for macOS target")
 #endif
