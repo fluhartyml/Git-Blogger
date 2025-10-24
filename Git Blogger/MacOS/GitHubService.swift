@@ -2,7 +2,8 @@
 //  GitHubService.swift
 //  Git Blogger
 //
-//  GitHub API integration using unencrypted token from config
+//  GitHub API integration with QA issue tracking
+//  Last Updated: 2025 OCT 24 1050
 //
 
 import Foundation
@@ -33,43 +34,42 @@ class GitHubService {
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         
-        print("🔍 Fetching GitHub repos from: \(urlString)")
-        print("🔑 Using token: \(configManager.config.github.token.prefix(10))...")
+        print("ð Fetching GitHub repos from: \(urlString)")
+        print("ð Using token: \(configManager.config.github.token.prefix(10))...")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        print("📦 Received response: \(response)")
+        print("ð¦ Received response: \(response)")
         if let httpResponse = response as? HTTPURLResponse {
-            print("📊 Status code: \(httpResponse.statusCode)")
-            print("📋 Headers: \(httpResponse.allHeaderFields)")
+            print("ð Status code: \(httpResponse.statusCode)")
+            print("ð Headers: \(httpResponse.allHeaderFields)")
         }
-        print("💾 Data size: \(data.count) bytes")
+        print("ð¾ Data size: \(data.count) bytes")
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GitHubError.invalidResponse
         }
         
         guard httpResponse.statusCode == 200 else {
-            print("❌ HTTP Error: \(httpResponse.statusCode)")
+            print("â HTTP Error: \(httpResponse.statusCode)")
             throw GitHubError.httpError(httpResponse.statusCode)
         }
         
         let decoder = JSONDecoder()
-        // Remove .convertFromSnakeCase - we handle it manually in CodingKeys
         decoder.dateDecodingStrategy = .iso8601
         
         do {
             let repos = try decoder.decode([Repository].self, from: data)
-            print("✅ Successfully decoded \(repos.count) repositories")
+            print("â Successfully decoded \(repos.count) repositories")
             
             // Cache to data directory
             try? cacheRepositories(repos)
             
             return repos
         } catch {
-            print("❌ JSON Decode Error: \(error)")
+            print("â JSON Decode Error: \(error)")
             if let jsonString = String(data: data, encoding: .utf8) {
-                print("📄 Raw JSON (first 500 chars): \(jsonString.prefix(500))")
+                print("ð Raw JSON (first 500 chars): \(jsonString.prefix(500))")
             }
             throw error
         }
@@ -93,7 +93,7 @@ class GitHubService {
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         
-        print("🔍 Fetching issues for \(repository.name) from: \(urlString)")
+        print("ð Fetching issues for \(repository.name) from: \(urlString)")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -102,24 +102,28 @@ class GitHubService {
         }
         
         guard httpResponse.statusCode == 200 else {
-            print("❌ HTTP Error: \(httpResponse.statusCode)")
+            print("â HTTP Error: \(httpResponse.statusCode)")
             throw GitHubError.httpError(httpResponse.statusCode)
         }
         
         let decoder = JSONDecoder()
-        // Remove .convertFromSnakeCase - we handle it manually in CodingKeys
         decoder.dateDecodingStrategy = .iso8601
         
         do {
-            let issues = try decoder.decode([Issue].self, from: data)
-            print("✅ Successfully decoded \(issues.count) issues for \(repository.name)")
+            var issues = try decoder.decode([Issue].self, from: data)
+            print("â Successfully decoded \(issues.count) issues for \(repository.name)")
+            
+            // Merge with cached local data (private notes, archive status, manual status)
+            if let cachedIssues = loadCachedIssues(for: repository) {
+                issues = mergeLocalData(github: issues, cached: cachedIssues)
+            }
             
             // Cache to data directory
             try? cacheIssues(issues, for: repository)
             
             return issues
         } catch {
-            print("❌ JSON Decode Error: \(error)")
+            print("â JSON Decode Error: \(error)")
             throw error
         }
     }
@@ -156,7 +160,7 @@ class GitHubService {
         
         request.httpBody = try JSONEncoder().encode(payload)
         
-        print("🔄 Updating issue #\(issueNumber) in \(repository.name)")
+        print("ð Updating issue #\(issueNumber) in \(repository.name)")
         
         let (_, response) = try await URLSession.shared.data(for: request)
         
@@ -165,11 +169,139 @@ class GitHubService {
         }
         
         guard httpResponse.statusCode == 200 else {
-            print("❌ HTTP Error: \(httpResponse.statusCode)")
+            print("â HTTP Error: \(httpResponse.statusCode)")
             throw GitHubError.httpError(httpResponse.statusCode)
         }
         
-        print("✅ Successfully updated issue #\(issueNumber)")
+        print("â Successfully updated issue #\(issueNumber)")
+    }
+    
+    // MARK: - Close/Reopen Issue
+    
+    func closeIssue(repository: Repository, issueNumber: Int) async throws {
+        try await updateIssueState(repository: repository, issueNumber: issueNumber, state: "closed")
+    }
+    
+    func reopenIssue(repository: Repository, issueNumber: Int) async throws {
+        try await updateIssueState(repository: repository, issueNumber: issueNumber, state: "open")
+    }
+    
+    private func updateIssueState(repository: Repository, issueNumber: Int, state: String) async throws {
+        guard !configManager.config.github.token.isEmpty else {
+            throw GitHubError.noToken
+        }
+        
+        let urlString = "https://api.github.com/repos/\(repository.fullName)/issues/\(issueNumber)"
+        
+        guard let url = URL(string: urlString) else {
+            throw GitHubError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("Bearer \(configManager.config.github.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let payload: [String: String] = ["state": state]
+        request.httpBody = try JSONEncoder().encode(payload)
+        
+        print("ð \(state == "closed" ? "Closing" : "Reopening") issue #\(issueNumber) in \(repository.name)")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            print("â HTTP Error: \(httpResponse.statusCode)")
+            throw GitHubError.httpError(httpResponse.statusCode)
+        }
+        
+        print("â Successfully \(state == "closed" ? "closed" : "reopened") issue #\(issueNumber)")
+    }
+    
+    // MARK: - Add Comment
+    
+    func addComment(repository: Repository, issueNumber: Int, body: String) async throws {
+        guard !configManager.config.github.token.isEmpty else {
+            throw GitHubError.noToken
+        }
+        
+        let urlString = "https://api.github.com/repos/\(repository.fullName)/issues/\(issueNumber)/comments"
+        
+        guard let url = URL(string: urlString) else {
+            throw GitHubError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(configManager.config.github.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let payload: [String: String] = ["body": body]
+        request.httpBody = try JSONEncoder().encode(payload)
+        
+        print("ð¬ Adding comment to issue #\(issueNumber) in \(repository.name)")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 201 else {
+            print("â HTTP Error: \(httpResponse.statusCode)")
+            throw GitHubError.httpError(httpResponse.statusCode)
+        }
+        
+        print("â Successfully added comment to issue #\(issueNumber)")
+    }
+    
+    // MARK: - Local Data Management
+    
+    func updateLocalIssueData(
+        repository: Repository,
+        issueNumber: Int,
+        privateNotes: String? = nil,
+        isArchived: Bool? = nil,
+        manualStatus: String? = nil
+    ) throws {
+        var issues = loadCachedIssues(for: repository) ?? []
+        
+        if let index = issues.firstIndex(where: { $0.number == issueNumber }) {
+            if let notes = privateNotes {
+                issues[index].privateNotes = notes
+            }
+            if let archived = isArchived {
+                issues[index].isArchived = archived
+            }
+            if let status = manualStatus {
+                issues[index].manualStatus = status
+            }
+            
+            try cacheIssues(issues, for: repository)
+            print("â Updated local data for issue #\(issueNumber)")
+        }
+    }
+    
+    private func mergeLocalData(github: [Issue], cached: [Issue]) -> [Issue] {
+        var merged = github
+        
+        for (index, githubIssue) in merged.enumerated() {
+            if let cachedIssue = cached.first(where: { $0.id == githubIssue.id }) {
+                // Preserve local-only data
+                merged[index].privateNotes = cachedIssue.privateNotes
+                merged[index].isArchived = cachedIssue.isArchived
+                merged[index].manualStatus = cachedIssue.manualStatus
+            }
+        }
+        
+        return merged
     }
     
     // MARK: - Cache Management
@@ -185,7 +317,7 @@ class GitHubService {
         let cacheURL = configManager.dataFileURL(for: "repositories.json")
         
         try data.write(to: cacheURL)
-        print("Cached repositories to: \(cacheURL.path)")
+        print("ð Cached repositories to: \(cacheURL.path)")
     }
     
     func loadCachedRepositories() -> [Repository]? {
@@ -194,7 +326,6 @@ class GitHubService {
         guard let data = try? Data(contentsOf: cacheURL) else { return nil }
         
         let decoder = JSONDecoder()
-        // Remove .convertFromSnakeCase - we handle it manually in CodingKeys
         decoder.dateDecodingStrategy = .iso8601
         
         return try? decoder.decode([Repository].self, from: data)
@@ -211,7 +342,7 @@ class GitHubService {
         let cacheURL = configManager.dataFileURL(for: "issues-\(repository.name).json")
         
         try data.write(to: cacheURL)
-        print("Cached issues to: \(cacheURL.path)")
+        print("ð Cached issues to: \(cacheURL.path)")
     }
     
     func loadCachedIssues(for repository: Repository) -> [Issue]? {
@@ -220,7 +351,6 @@ class GitHubService {
         guard let data = try? Data(contentsOf: cacheURL) else { return nil }
         
         let decoder = JSONDecoder()
-        // Remove .convertFromSnakeCase - we handle it manually in CodingKeys
         decoder.dateDecodingStrategy = .iso8601
         
         return try? decoder.decode([Issue].self, from: data)

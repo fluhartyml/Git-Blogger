@@ -2,12 +2,15 @@
 //  Issue.swift
 //  Git Blogger
 //
-//  GitHub issue data model
+//  GitHub issue data model with local QA tracking
+//  Last Updated: 2025 OCT 24 1045
 //
 
 import Foundation
+import SwiftUI
 
 struct Issue: Codable, Identifiable, Hashable {
+    // GitHub data
     let id: Int
     let number: Int
     let title: String
@@ -21,12 +24,75 @@ struct Issue: Codable, Identifiable, Hashable {
     let closedAt: Date?
     let comments: Int
     
+    // Local tracking data
+    var privateNotes: String?
+    var isArchived: Bool
+    var manualStatus: String?
+    
     var url: URL? {
         URL(string: htmlUrl)
     }
     
     var isOpen: Bool {
         state == "open"
+    }
+    
+    var isClosed: Bool {
+        state == "closed"
+    }
+    
+    // Priority color logic
+    var priorityColor: Color {
+        // If manual status mode is being used, return that
+        if let manual = manualStatus {
+            switch manual {
+            case "red": return .red
+            case "yellow": return .yellow
+            case "lightGreen": return .green
+            case "darkGreen": return Color(red: 0, green: 0.5, blue: 0)
+            default: break
+            }
+        }
+        
+        // Automatic color logic (GitHub is source of truth)
+        if isArchived {
+            return Color(red: 0, green: 0.5, blue: 0) // Dark green
+        }
+        
+        if isClosed {
+            return .green // Light green
+        }
+        
+        if isOpen {
+            if comments == 0 {
+                return .red // No comments yet
+            } else {
+                return .yellow // Has comments
+            }
+        }
+        
+        return .gray // Fallback
+    }
+    
+    var priorityLevel: Int {
+        switch priorityColor {
+        case .red: return 0 // Highest priority
+        case .yellow: return 1
+        case .green: return 2
+        case Color(red: 0, green: 0.5, blue: 0): return 3 // Dark green lowest
+        default: return 4
+        }
+    }
+    
+    var textColor: Color {
+        // Return contrasting text color for each background
+        switch priorityColor {
+        case .red: return .white
+        case .yellow: return .black
+        case .green: return .black
+        case Color(red: 0, green: 0.5, blue: 0): return .white // Dark green
+        default: return .black
+        }
     }
     
     enum CodingKeys: String, CodingKey {
@@ -42,6 +108,48 @@ struct Issue: Codable, Identifiable, Hashable {
         case updatedAt = "updated_at"
         case closedAt = "closed_at"
         case comments
+        case privateNotes
+        case isArchived
+        case manualStatus
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        number = try container.decode(Int.self, forKey: .number)
+        title = try container.decode(String.self, forKey: .title)
+        body = try container.decodeIfPresent(String.self, forKey: .body)
+        state = try container.decode(String.self, forKey: .state)
+        htmlUrl = try container.decode(String.self, forKey: .htmlUrl)
+        user = try container.decode(IssueUser.self, forKey: .user)
+        labels = try container.decode([IssueLabel].self, forKey: .labels)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        closedAt = try container.decodeIfPresent(Date.self, forKey: .closedAt)
+        comments = try container.decode(Int.self, forKey: .comments)
+        
+        // Local data - use defaults if not present
+        privateNotes = try container.decodeIfPresent(String.self, forKey: .privateNotes)
+        isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+        manualStatus = try container.decodeIfPresent(String.self, forKey: .manualStatus)
+    }
+    
+    init(id: Int, number: Int, title: String, body: String?, state: String, htmlUrl: String, user: IssueUser, labels: [IssueLabel], createdAt: Date, updatedAt: Date, closedAt: Date?, comments: Int, privateNotes: String? = nil, isArchived: Bool = false, manualStatus: String? = nil) {
+        self.id = id
+        self.number = number
+        self.title = title
+        self.body = body
+        self.state = state
+        self.htmlUrl = htmlUrl
+        self.user = user
+        self.labels = labels
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.closedAt = closedAt
+        self.comments = comments
+        self.privateNotes = privateNotes
+        self.isArchived = isArchived
+        self.manualStatus = manualStatus
     }
 }
 
