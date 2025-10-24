@@ -199,7 +199,7 @@
 					};
 				};
 			};
-			buildConfigurationList = C088BB0C2EA27F3C00D73652 /* Build configuration list for PBXProject "Git Blogger" */;
+			buildConfigurationList = C088BB0C2EA27F3C00D73652 /* Build configuration list for PBXProject "Git IssueTracker" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -302,6 +302,7 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Git Blogger/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Git Issue Tracker";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -359,6 +360,7 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Git Blogger/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Git Issue Tracker";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -617,7 +619,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C088BB0C2EA27F3C00D73652 /* Build configuration list for PBXProject "Git Blogger" */ = {
+		C088BB0C2EA27F3C00D73652 /* Build configuration list for PBXProject "Git IssueTracker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C088BB382EA27F3E00D73652 /* Debug */,
