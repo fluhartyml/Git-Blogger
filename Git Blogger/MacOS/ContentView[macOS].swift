@@ -249,6 +249,9 @@ struct RepositoryDetailView: View {
     let repository: Repository
     let onIssuesClick: () -> Void
     
+    @State private var showingNewIssue = false
+    private let configManager = ConfigManager()
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -307,7 +310,7 @@ struct RepositoryDetailView: View {
                     
                     HStack(spacing: 12) {
                         Button {
-                            // TODO: Show new issue sheet
+                            showingNewIssue = true
                         } label: {
                             Label("New Issue", systemImage: "plus.circle")
                         }
@@ -352,6 +355,16 @@ struct RepositoryDetailView: View {
                 Spacer()
             }
             .padding()
+        }
+        .sheet(isPresented: $showingNewIssue) {
+            NewIssueView(
+                repository: repository,
+                configManager: configManager,
+                onIssueCreated: {
+                    showingNewIssue = false
+                    // Optionally reload issues or navigate to new issue
+                }
+            )
         }
     }
     
@@ -624,6 +637,123 @@ struct InfoRow: View {
     }
 }
 
+// MARK: - New Issue View
+
+struct NewIssueView: View {
+    let repository: Repository
+    let configManager: ConfigManager
+    let onIssueCreated: () -> Void
+    
+    @State private var title: String = ""
+    @State private var description: String = ""
+    @State private var isCreating = false
+    @State private var errorMessage: String?
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("New Issue")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding()
+            .background(Color(NSColor.controlBackgroundColor))
+            
+            Divider()
+            
+            // Form
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Repository: \(repository.name)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    
+                    // Title field
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Title")
+                            .font(.headline)
+                        TextField("Issue title", text: $title)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    
+                    // Description field
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Description")
+                            .font(.headline)
+                        TextEditor(text: $description)
+                            .frame(minHeight: 200)
+                            .border(Color.secondary.opacity(0.3))
+                    }
+                    
+                    // Error message
+                    if let error = errorMessage {
+                        Text(error)
+                            .foregroundColor(.red)
+                            .font(.caption)
+                    }
+                }
+                .padding()
+            }
+            
+            Divider()
+            
+            // Footer buttons
+            HStack {
+                Spacer()
+                
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                
+                Button("Create Issue") {
+                    createIssue()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(title.isEmpty || isCreating)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding()
+            .background(Color(NSColor.controlBackgroundColor))
+        }
+        .frame(width: 600, height: 500)
+    }
+    
+    private func createIssue() {
+        isCreating = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let service = GitHubService(configManager: configManager)
+                try await service.createIssue(
+                    repository: repository,
+                    title: title,
+                    body: description.isEmpty ? nil : description
+                )
+                
+                await MainActor.run {
+                    onIssueCreated()
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isCreating = false
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Helper for hex color
 
 extension Color {
@@ -653,4 +783,3 @@ extension Color {
         .frame(width: 1200, height: 800)
 }
 #endif
-
