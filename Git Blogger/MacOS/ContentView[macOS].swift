@@ -386,23 +386,16 @@ struct IssueRowView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("#\(issue.number)")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Text(issue.title)
                         .fontWeight(.medium)
+                        .font(.body)
                 }
                 
-                HStack(spacing: 8) {
-                    Text("by \(issue.user.login)")
-                        .font(.caption2)
-                    Text("â¢")
-                    Text(issue.createdAt.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption2)
-                    Text("â¢")
-                    Text("\(issue.comments) comments")
-                        .font(.caption2)
-                }
-                .foregroundStyle(.secondary)
+                Text("by \(issue.user.login) \(issue.createdAt.formatted(date: .abbreviated, time: .omitted)) \(issue.comments) comments")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
             
             Spacer()
