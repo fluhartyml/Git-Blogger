@@ -120,6 +120,10 @@ struct ContentView: View {
                 Button {
                     Task {
                         await fetchRepositories()
+                        // Also reload issues if a repository is selected
+                        if let repo = selectedRepository, !currentIssues.isEmpty {
+                            loadIssues(for: repo)
+                        }
                     }
                 } label: {
                     Image(systemName: "arrow.clockwise")
@@ -278,7 +282,7 @@ struct RepositoryDetailView: View {
                             Image(systemName: "circle.fill")
                                 .font(.caption)
                                 .foregroundStyle(issueColor)
-                            Text("📋 \(repository.openIssuesCount) issues")
+                            Text("ð \(repository.openIssuesCount) issues")
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -302,6 +306,12 @@ struct RepositoryDetailView: View {
                         .font(.headline)
                     
                     HStack(spacing: 12) {
+                        Button {
+                            // TODO: Show new issue sheet
+                        } label: {
+                            Label("New Issue", systemImage: "plus.circle")
+                        }
+                        
                         Button {
                             // Manage wiki action
                         } label: {
@@ -372,10 +382,10 @@ struct IssueRowView: View {
                 HStack(spacing: 8) {
                     Text("by \(issue.user.login)")
                         .font(.caption2)
-                    Text("•")
+                    Text("â¢")
                     Text(issue.createdAt.formatted(date: .abbreviated, time: .omitted))
                         .font(.caption2)
-                    Text("•")
+                    Text("â¢")
                     Text("\(issue.comments) comments")
                         .font(.caption2)
                 }
@@ -454,7 +464,7 @@ struct IssueDetailView: View {
                             Text("by \(currentIssue.user.login)")
                                 .foregroundStyle(.secondary)
                             
-                            Text("•")
+                            Text("â¢")
                                 .foregroundStyle(.secondary)
                             
                             Text(currentIssue.createdAt.formatted(date: .abbreviated, time: .omitted))
@@ -533,37 +543,22 @@ struct IssueDetailView: View {
                 
                 Spacer()
                 
-                // Status Buttons (bottom center)
-                HStack(spacing: 12) {
-                    StatusButton(
-                        title: "Mark New",
-                        color: .red,
-                        isActive: currentIssue.priorityColor == .red,
-                        action: { setStatus("red") }
+                // Close/Reopen Issue Button
+                Button {
+                    toggleIssueState()
+                } label: {
+                    Label(
+                        currentIssue.isOpen ? "Close Issue" : "Reopen Issue",
+                        systemImage: currentIssue.isOpen ? "xmark.circle" : "arrow.clockwise.circle"
                     )
-                    
-                    StatusButton(
-                        title: "Working On",
-                        color: .yellow,
-                        isActive: currentIssue.priorityColor == .yellow,
-                        action: { setStatus("yellow") }
-                    )
-                    
-                    StatusButton(
-                        title: "Resolved",
-                        color: .green,
-                        isActive: currentIssue.priorityColor == .green,
-                        action: { setStatus("lightGreen") }
-                    )
-                    
-                    StatusButton(
-                        title: "Archive",
-                        color: Color(red: 0, green: 0.5, blue: 0),
-                        isActive: currentIssue.priorityColor == Color(red: 0, green: 0.5, blue: 0),
-                        action: { setStatus("darkGreen") }
-                    )
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(currentIssue.isOpen ? Color.red : Color.green)
+                    .cornerRadius(8)
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.plain)
                 .padding(.vertical, 20)
             }
             .padding()
@@ -584,83 +579,30 @@ struct IssueDetailView: View {
         onStatusChange(updated)
     }
     
-    private func setStatus(_ status: String) {
+    private func toggleIssueState() {
         Task {
             let service = GitHubService(configManager: configManager)
             
-            // Handle GitHub state changes
-            switch status {
-            case "red", "yellow":
-                if currentIssue.isClosed {
-                    try? await service.reopenIssue(repository: repository, issueNumber: currentIssue.number)
-                }
-            case "lightGreen":
+            do {
                 if currentIssue.isOpen {
-                    try? await service.closeIssue(repository: repository, issueNumber: currentIssue.number)
+                    // Close the issue
+                    try await service.closeIssue(repository: repository, issueNumber: currentIssue.number)
+                } else {
+                    // Reopen the issue
+                    try await service.reopenIssue(repository: repository, issueNumber: currentIssue.number)
                 }
-            case "darkGreen":
-                if currentIssue.isOpen {
-                    try? await service.closeIssue(repository: repository, issueNumber: currentIssue.number)
+                
+                // Refresh issue data from GitHub
+                let issues = try await service.fetchIssues(for: repository, state: "all")
+                if let updatedIssue = issues.first(where: { $0.number == currentIssue.number }) {
+                    await MainActor.run {
+                        currentIssue = updatedIssue
+                        onStatusChange(updatedIssue)
+                    }
                 }
-                try? service.updateLocalIssueData(
-                    repository: repository,
-                    issueNumber: currentIssue.number,
-                    isArchived: true
-                )
-            default:
-                break
+            } catch {
+                print("Error toggling issue state: \(error)")
             }
-            
-            // Update manual status locally
-            try? service.updateLocalIssueData(
-                repository: repository,
-                issueNumber: currentIssue.number,
-                manualStatus: status
-            )
-            
-            // Refresh issue data
-            let issues = try? await service.fetchIssues(for: repository, state: "all")
-            if let updatedIssue = issues?.first(where: { $0.number == currentIssue.number }) {
-                await MainActor.run {
-                    currentIssue = updatedIssue
-                    onStatusChange(updatedIssue)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Status Button
-
-struct StatusButton: View {
-    let title: String
-    let color: Color
-    let isActive: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.caption)
-                .fontWeight(.medium)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(isActive ? color : color.opacity(0.3))
-                .foregroundColor(textColor)
-                .cornerRadius(6)
-        }
-        .buttonStyle(.plain)
-    }
-    
-    private var textColor: Color {
-        if isActive {
-            switch color {
-            case .red, Color(red: 0, green: 0.5, blue: 0): return .white
-            case .yellow, .green: return .black
-            default: return .white
-            }
-        } else {
-            return .primary
         }
     }
 }
