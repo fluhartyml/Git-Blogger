@@ -111,6 +111,12 @@ class GitHubService {
         
         do {
             var issues = try decoder.decode([Issue].self, from: data)
+            
+            // Add repository name to each issue
+            for index in issues.indices {
+                issues[index].repositoryName = repository.fullName
+            }
+            
             print("â Successfully decoded \(issues.count) issues for \(repository.name)")
             
             // Merge with cached local data (private notes, archive status, manual status)

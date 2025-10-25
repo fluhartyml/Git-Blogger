@@ -3,7 +3,7 @@
 //  Git Blogger
 //
 //  GitHub issue data model with local QA tracking
-//  Last Updated: 2025 OCT 24 1045
+//  Last Updated: 2025 OCT 24 1910
 //
 
 import Foundation
@@ -23,6 +23,9 @@ struct Issue: Codable, Identifiable, Hashable {
     let updatedAt: Date
     let closedAt: Date?
     let comments: Int
+    
+    // Repository tracking
+    var repositoryName: String
     
     // Local tracking data
     var privateNotes: String?
@@ -108,6 +111,7 @@ struct Issue: Codable, Identifiable, Hashable {
         case updatedAt = "updated_at"
         case closedAt = "closed_at"
         case comments
+        case repositoryName
         case privateNotes
         case isArchived
         case manualStatus
@@ -128,13 +132,16 @@ struct Issue: Codable, Identifiable, Hashable {
         closedAt = try container.decodeIfPresent(Date.self, forKey: .closedAt)
         comments = try container.decode(Int.self, forKey: .comments)
         
+        // Repository name - default to empty if not present
+        repositoryName = try container.decodeIfPresent(String.self, forKey: .repositoryName) ?? ""
+        
         // Local data - use defaults if not present
         privateNotes = try container.decodeIfPresent(String.self, forKey: .privateNotes)
         isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
         manualStatus = try container.decodeIfPresent(String.self, forKey: .manualStatus)
     }
     
-    init(id: Int, number: Int, title: String, body: String?, state: String, htmlUrl: String, user: IssueUser, labels: [IssueLabel], createdAt: Date, updatedAt: Date, closedAt: Date?, comments: Int, privateNotes: String? = nil, isArchived: Bool = false, manualStatus: String? = nil) {
+    init(id: Int, number: Int, title: String, body: String?, state: String, htmlUrl: String, user: IssueUser, labels: [IssueLabel], createdAt: Date, updatedAt: Date, closedAt: Date?, comments: Int, repositoryName: String = "", privateNotes: String? = nil, isArchived: Bool = false, manualStatus: String? = nil) {
         self.id = id
         self.number = number
         self.title = title
@@ -147,6 +154,7 @@ struct Issue: Codable, Identifiable, Hashable {
         self.updatedAt = updatedAt
         self.closedAt = closedAt
         self.comments = comments
+        self.repositoryName = repositoryName
         self.privateNotes = privateNotes
         self.isArchived = isArchived
         self.manualStatus = manualStatus
@@ -185,7 +193,8 @@ extension Issue {
         createdAt: Date().addingTimeInterval(-86400 * 7),
         updatedAt: Date().addingTimeInterval(-86400 * 2),
         closedAt: nil,
-        comments: 3
+        comments: 3,
+        repositoryName: "fluhartyml/fluhartyml.github.io"
     )
     
     static let mockClosed = Issue(
@@ -200,6 +209,8 @@ extension Issue {
         createdAt: Date().addingTimeInterval(-86400 * 14),
         updatedAt: Date().addingTimeInterval(-86400 * 10),
         closedAt: Date().addingTimeInterval(-86400 * 10),
-        comments: 1
+        comments: 1,
+        repositoryName: "fluhartyml/fluhartyml.github.io"
     )
 }
+
