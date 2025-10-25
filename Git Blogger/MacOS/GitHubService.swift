@@ -177,6 +177,85 @@ class GitHubService {
         print("â Successfully created issue '\(title)'")
     }
     
+    // MARK: - Fetch Comments
+    
+    func fetchComments(repository: Repository, issueNumber: Int) async throws -> [Comment] {
+        guard !configManager.config.github.token.isEmpty else {
+            throw GitHubError.noToken
+        }
+        
+        let urlString = "https://api.github.com/repos/\(repository.fullName)/issues/\(issueNumber)/comments"
+        
+        guard let url = URL(string: urlString) else {
+            throw GitHubError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(configManager.config.github.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        
+        print("ð¬ Fetching comments for issue #\(issueNumber) in \(repository.name)")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            print("â HTTP Error: \(httpResponse.statusCode)")
+            throw GitHubError.httpError(httpResponse.statusCode)
+        }
+        
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        
+        let comments = try decoder.decode([Comment].self, from: data)
+        print("â Successfully decoded \(comments.count) comments")
+        
+        return comments
+    }
+    
+    // MARK: - Add Comment
+    
+    func addComment(repository: Repository, issueNumber: Int, body: String) async throws {
+        guard !configManager.config.github.token.isEmpty else {
+            throw GitHubError.noToken
+        }
+        
+        let urlString = "https://api.github.com/repos/\(repository.fullName)/issues/\(issueNumber)/comments"
+        
+        guard let url = URL(string: urlString) else {
+            throw GitHubError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(configManager.config.github.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let payload: [String: String] = ["body": body]
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        
+        print("ð¬ Adding comment to issue #\(issueNumber) in \(repository.name)")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 201 else {
+            print("â HTTP Error: \(httpResponse.statusCode)")
+            throw GitHubError.httpError(httpResponse.statusCode)
+        }
+        
+        print("â Successfully added comment")
+    }
+    
     // MARK: - Update Issue
     
     func updateIssue(
@@ -270,45 +349,6 @@ class GitHubService {
         }
         
         print("â Successfully \(state == "closed" ? "closed" : "reopened") issue #\(issueNumber)")
-    }
-    
-    // MARK: - Add Comment
-    
-    func addComment(repository: Repository, issueNumber: Int, body: String) async throws {
-        guard !configManager.config.github.token.isEmpty else {
-            throw GitHubError.noToken
-        }
-        
-        let urlString = "https://api.github.com/repos/\(repository.fullName)/issues/\(issueNumber)/comments"
-        
-        guard let url = URL(string: urlString) else {
-            throw GitHubError.invalidURL
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(configManager.config.github.token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let payload: [String: String] = ["body": body]
-        request.httpBody = try JSONEncoder().encode(payload)
-        
-        print("ð¬ Adding comment to issue #\(issueNumber) in \(repository.name)")
-        
-        let (_, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GitHubError.invalidResponse
-        }
-        
-        guard httpResponse.statusCode == 201 else {
-            print("â HTTP Error: \(httpResponse.statusCode)")
-            throw GitHubError.httpError(httpResponse.statusCode)
-        }
-        
-        print("â Successfully added comment to issue #\(issueNumber)")
     }
     
     // MARK: - Local Data Management
@@ -427,3 +467,4 @@ enum GitHubError: LocalizedError {
         }
     }
 }
+
